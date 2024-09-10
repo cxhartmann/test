@@ -12,7 +12,7 @@
             bottom: 0;
             left: 0;
             width: 100%;
-            height: 150px;
+            height: 75px;
             display: flex;
             justify-content: space-between;
             align-items: flex-end;
@@ -21,18 +21,23 @@
             pointer-events: none;
         }
         .spectrometer-bar {
+            position: relative;
             flex-grow: 1;
-            width: 2px; /* Thin width for each bar */
+            width: 2px;
             margin: 0 1px;
-            box-shadow: 0 0 5px rgba(235, 7, 7, 0.935);
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
             transition: height 0.05s ease;
-            opacity: 0.49; /* Make the bars half transparent */
-            background-color: rgba(222, 12, 12, 0.932); /* Default light color */
+            opacity: 1;
         }
-        .spectrometer-segment {
-            height: 3px;
-            background-color: rgba(0, 0, 0, 0.2);
-            margin-top: 1px;
+
+        .peak-indicator {
+            position: absolute;
+            width: 100%;
+            height: 4px;
+            background-color: rgb(0, 0, 0);
+            bottom: 0;
+            transition: bottom 0.3s ease;
+            box-shadow: 0 0 2px rgba(255, 255, 255, 0.5);
         }
 
         #control-panel {
@@ -44,7 +49,7 @@
             border-radius: 5px;
             color: white;
             font-family: Arial, sans-serif;
-            z-index: 1000; /* Ensure it's above other elements */
+            z-index: 1000;
         }
 
         .slider-container {
@@ -65,6 +70,25 @@
             display: inline-block;
             width: 50px;
             text-align: right;
+        }
+
+        #playPauseBtn {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+
+        #playPauseBtn:hover {
+            background-color: #45a049;
         }
     </style>
 </head>
@@ -132,38 +156,62 @@
         };
         let momentum = { x: 0, y: 0 };
         const momentumDecay = 0.95;
-        const normalRotationSpeed = 0.0015;
-        let currentRotationSpeed = normalRotationSpeed;
+        const rotationSpeed = 0.005;
 
-        document.addEventListener('mousedown', (e) => {
+        function startDrag(clientX, clientY) {
             isDragging = true;
-            momentum = { x: 0, y: 0 };
-        });
+            previousMousePosition = {
+                x: clientX,
+                y: clientY
+            };
+        }
 
-        document.addEventListener('mouseup', (e) => {
+        function endDrag() {
             isDragging = false;
-        });
+        }
 
-        document.addEventListener('mousemove', (e) => {
+        function drag(clientX, clientY) {
             if (isDragging) {
                 const deltaMove = {
-                    x: e.offsetX - previousMousePosition.x,
-                    y: e.offsetY - previousMousePosition.y
+                    x: clientX - previousMousePosition.x,
+                    y: clientY - previousMousePosition.y
                 };
 
-                camera.rotation.y += deltaMove.x * 0.005;
-                camera.rotation.x += deltaMove.y * 0.005;
+                skybox.rotation.y += deltaMove.x * rotationSpeed;
+                skybox.rotation.x += deltaMove.y * rotationSpeed;
 
-                momentum.x = deltaMove.x * 0.005;
-                momentum.y = deltaMove.y * 0.005;
+                momentum.x = deltaMove.x * rotationSpeed;
+                momentum.y = deltaMove.y * rotationSpeed;
+
+                previousMousePosition = {
+                    x: clientX,
+                    y: clientY
+                };
             }
+        }
 
-            previousMousePosition = {
-                x: e.offsetX,
-                y: e.offsetY
-            };
+        // Mouse events
+        document.addEventListener('mousedown', (e) => startDrag(e.clientX, e.clientY));
+        document.addEventListener('mouseup', endDrag);
+        document.addEventListener('mousemove', (e) => drag(e.clientX, e.clientY));
+
+        // Touch events
+        document.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 1) {
+                startDrag(e.touches[0].clientX, e.touches[0].clientY);
+            }
+        });
+        document.addEventListener('touchend', endDrag);
+        document.addEventListener('touchmove', (e) => {
+            if (e.touches.length === 1) {
+                drag(e.touches[0].clientX, e.touches[0].clientY);
+            }
         });
 
+        // Prevent default touch behavior to avoid scrolling
+        document.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
+
+        // Zoom with mouse wheel
         document.addEventListener('wheel', (e) => {
             camera.fov += e.deltaY * 0.05;
             camera.fov = Math.max(30, Math.min(camera.fov, 120));
@@ -207,7 +255,24 @@
         const spectrometer = document.getElementById('spectrometer');
         const numBars = 128; // Increased number of bars
         const spectrometerBars = [];
-        const segmentsPerBar = 20;
+        const peakIndicators = [];
+        const peakValues = new Array(numBars).fill(0);
+        const peakDecayRate = 0.1; // Reduced from 0.3 to 0.1 for slower decay
+        const peakHoldTime = 30; // Number of frames to hold the peak before decaying
+        const peakHoldCounters = new Array(numBars).fill(0);
+
+        for (let i = 0; i < numBars; i++) {
+            const bar = document.createElement('div');
+            bar.className = 'spectrometer-bar';
+            
+            const peakIndicator = document.createElement('div');
+            peakIndicator.className = 'peak-indicator';
+            bar.appendChild(peakIndicator);
+            
+            spectrometer.appendChild(bar);
+            spectrometerBars.push(bar);
+            peakIndicators.push(peakIndicator);
+        }
 
         // Update the getColorForIntensity function
         function getColorForIntensity(intensity) {
@@ -227,13 +292,6 @@
             }
             
             return { r, g, b };
-        }
-
-        for (let i = 0; i < numBars; i++) {
-            const bar = document.createElement('div');
-            bar.className = 'spectrometer-bar';
-            spectrometer.appendChild(bar);
-            spectrometerBars.push(bar);
         }
 
         // Setup control panel sliders
@@ -266,8 +324,9 @@
             currentRotationSpeed = baseRotationSpeed * Math.pow(value, rotationSpeedMultiplier);
         });
 
-        // Add this to your existing JavaScript
+        // Play/Pause button functionality
         const playPauseBtn = document.getElementById('playPauseBtn');
+
         playPauseBtn.addEventListener('click', () => {
             if (audioContext.state === 'suspended') {
                 audioContext.resume();
@@ -282,16 +341,10 @@
             }
         });
 
-        // Remove or comment out any existing click event listeners that start the music
-        // For example, remove or comment out code like this if it exists:
-        /*
-        document.addEventListener('click', () => {
-            if (audioContext.state === 'suspended') {
-                audioContext.resume();
-            }
-            backgroundMusic.play();
-        }, { once: true });
-        */
+        // Variables for rotation speed
+        let baseRotationSpeed = 0.001;
+        let currentRotationSpeed = baseRotationSpeed;
+        const rotationSpeedMultiplier = 3;
 
         // Variables for smooth zoom effect
         let targetFOV = 75;
@@ -310,11 +363,25 @@
             for (let i = 0; i < numBars; i++) {
                 const value = dataArray[i];
                 const percent = value / 255;
-                const height = percent * 100; // Max height of 150px
+                const height = percent * 75; // Max height is 75px
                 const color = getColorForIntensity(percent);
                 
                 spectrometerBars[i].style.height = `${height}px`;
                 spectrometerBars[i].style.backgroundColor = `rgb(${color.r}, ${color.g}, ${color.b})`;
+                
+                // Update peak value with hold time
+                if (height >= peakValues[i]) {
+                    peakValues[i] = height;
+                    peakHoldCounters[i] = peakHoldTime;
+                } else if (peakHoldCounters[i] > 0) {
+                    peakHoldCounters[i]--;
+                } else {
+                    peakValues[i] = Math.max(height, peakValues[i] - peakDecayRate);
+                }
+                
+                // Update peak indicator position
+                peakIndicators[i].style.bottom = `${peakValues[i]}px`; // Position from bottom
+                peakIndicators[i].style.top = 'auto'; // Remove top positioning
             }
 
             // Calculate average frequency
