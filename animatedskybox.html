@@ -18,10 +18,17 @@
     </script>
 </head>
 <body>
-    <video id="video" src="rickrollt.mp4" loop style="display:none"></video>
+    <video id="video" src="rickrollt.mp4" loop muted playsinline style="display:none"></video>
+    <div id="startPrompt" style="position: absolute; z-index: 100; width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; background-color: rgba(0,0,0,0.5); color: white; font-size: 24px;">
+        Tap to start
+    </div>
     <script type="module">
         import * as THREE from 'three';
         import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
+
+        const video = document.getElementById('video');
+        const startPrompt = document.getElementById('startPrompt');
+        let videoPlaying = false;
 
         // Set up the scene, camera, and renderer
         const scene = new THREE.Scene();
@@ -38,7 +45,6 @@
             scene.background = rt.texture;
 
             // Create video texture for the left pane
-            const video = document.getElementById('video');
             const videoTexture = new THREE.VideoTexture(video);
             videoTexture.minFilter = THREE.LinearFilter;
             videoTexture.magFilter = THREE.LinearFilter;
@@ -52,8 +58,21 @@
             videoPlane.position.x = -249; // Slightly inside the left of the skybox
             scene.add(videoPlane);
 
-            // Start the video
-            video.play();
+            // Function to start the video
+            function startVideo() {
+                if (!videoPlaying) {
+                    video.play().then(() => {
+                        videoPlaying = true;
+                        startPrompt.style.display = 'none';
+                    }).catch(error => {
+                        console.error("Video playback failed:", error);
+                    });
+                }
+            }
+
+            // Add click event listener to start the video
+            document.addEventListener('click', startVideo);
+            document.addEventListener('touchstart', startVideo);
         });
 
         // Position the camera
