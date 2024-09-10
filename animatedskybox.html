@@ -101,6 +101,41 @@
             camera.updateProjectionMatrix();
         });
 
+        // Add touch events for pinch-to-zoom
+        let initialPinchDistance = null;
+
+        renderer.domElement.addEventListener('touchstart', (event) => {
+            if (event.touches.length === 2) {
+                initialPinchDistance = getPinchDistance(event);
+            }
+        });
+
+        renderer.domElement.addEventListener('touchmove', (event) => {
+            if (event.touches.length === 2) {
+                event.preventDefault();
+                const currentPinchDistance = getPinchDistance(event);
+                
+                if (initialPinchDistance) {
+                    const pinchDelta = initialPinchDistance - currentPinchDistance;
+                    const fov = camera.fov + pinchDelta * zoomSpeed * 0.5;
+                    camera.fov = THREE.MathUtils.clamp(fov, minFov, maxFov);
+                    camera.updateProjectionMatrix();
+                }
+                
+                initialPinchDistance = currentPinchDistance;
+            }
+        });
+
+        renderer.domElement.addEventListener('touchend', () => {
+            initialPinchDistance = null;
+        });
+
+        function getPinchDistance(event) {
+            const touch1 = event.touches[0];
+            const touch2 = event.touches[1];
+            return Math.hypot(touch1.clientX - touch2.clientX, touch1.clientY - touch2.clientY);
+        }
+
         // Animation loop
         function animate() {
             requestAnimationFrame(animate);
