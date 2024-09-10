@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Skybox with Three.js, Music, and Zoom Effect</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        canvas { display: block; }
+        #spectrometer {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 150px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            padding: 0;
+            box-sizing: border-box;
+            pointer-events: none;
+        }
+        .spectrometer-bar {
+            flex-grow: 1;
+            width: 2px; /* Thin width for each bar */
+            margin: 0 1px;
+            box-shadow: 0 0 5px rgba(235, 7, 7, 0.935);
+            transition: height 0.05s ease;
+            opacity: 0.49; /* Make the bars half transparent */
+            background-color: rgba(222, 12, 12, 0.932); /* Default light color */
+        }
+        .spectrometer-segment {
+            height: 3px;
+            background-color: rgba(0, 0, 0, 0.2);
+            margin-top: 1px;
+        }
+
+        #control-panel {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+            color: white;
+            font-family: Arial, sans-serif;
+            z-index: 1000; /* Ensure it's above other elements */
+        }
+
+        .slider-container {
+            margin-bottom: 10px;
+        }
+
+        .slider-container label {
+            display: inline-block;
+            width: 120px;
+        }
+
+        .slider-container input {
+            width: 150px;
+            vertical-align: middle;
+        }
+
+        .slider-value {
+            display: inline-block;
+            width: 50px;
+            text-align: right;
+        }
+    </style>
+</head>
+<body>
+    <audio id="backgroundMusic" loop>
+        <source src="wayne.mp3" type="audio/mpeg">
+        Your browser does not support the audio element.
+    </audio>
+    <div id="spectrometer"></div>
+
+    <div id="control-panel">
+        <button id="playPauseBtn">Play</button>
+        <div class="slider-container">
+            <label for="lowPassFilter">Low Pass Filter:</label>
+            <input type="range" id="lowPassFilter" min="0" max="22050" value="22050">
+            <span class="slider-value" id="lowPassValue">22050 Hz</span>
+        </div>
+        <div class="slider-container">
+            <label for="highPassFilter">High Pass Filter:</label>
+            <input type="range" id="highPassFilter" min="0" max="22050" value="0">
+            <span class="slider-value" id="highPassValue">0 Hz</span>
+        </div>
+        <div class="slider-container">
+            <label for="tempo">Tempo:</label>
+            <input type="range" id="tempo" min="0.5" max="2" step="0.1" value="1">
+            <span class="slider-value" id="tempoValue">1x</span>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // Set up the scene, camera, and renderer
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // Create a skybox using a cube geometry with separate materials
+        const loader = new THREE.TextureLoader();
+        const sideTexture = loader.load('lilwayne.webp');
+        const topTexture = loader.load('waynealbum.jpg'); // Replace with your top texture image
+        const bottomTexture = loader.load('waynealbum.jpg'); // Replace with your bottom texture image
+
+        const skyboxGeometry = new THREE.BoxGeometry(500, 500, 500);
+        const materials = [
+            new THREE.MeshBasicMaterial({ map: sideTexture, side: THREE.BackSide }), // Right
+            new THREE.MeshBasicMaterial({ map: sideTexture, side: THREE.BackSide }), // Left
+            new THREE.MeshBasicMaterial({ map: topTexture, side: THREE.BackSide }), // Top
+            new THREE.MeshBasicMaterial({ map: bottomTexture, side: THREE.BackSide }), // Bottom
+            new THREE.MeshBasicMaterial({ map: sideTexture, side: THREE.BackSide }), // Front
+            new THREE.MeshBasicMaterial({ map: sideTexture, side: THREE.BackSide }), // Back
+        ];
+        const skybox = new THREE.Mesh(skyboxGeometry, materials);
+        scene.add(skybox);
+
+        // Set initial camera position
+        camera.position.set(0, 0, 0.1);
+
+        // Add controls for panning and zooming
+        let isDragging = false;
+        let previousMousePosition = {
+            x: 0,
+            y: 0
+        };
+        let momentum = { x: 0, y: 0 };
+        const momentumDecay = 0.95;
+        const normalRotationSpeed = 0.0015;
+        let currentRotationSpeed = normalRotationSpeed;
+
+        document.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            momentum = { x: 0, y: 0 };
+        });
+
+        document.addEventListener('mouseup', (e) => {
+            isDragging = false;
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (isDragging) {
+                const deltaMove = {
+                    x: e.offsetX - previousMousePosition.x,
+                    y: e.offsetY - previousMousePosition.y
+                };
+
+                camera.rotation.y += deltaMove.x * 0.005;
+                camera.rotation.x += deltaMove.y * 0.005;
+
+                momentum.x = deltaMove.x * 0.005;
+                momentum.y = deltaMove.y * 0.005;
+            }
+
+            previousMousePosition = {
+                x: e.offsetX,
+                y: e.offsetY
+            };
+        });
+
+        document.addEventListener('wheel', (e) => {
+            camera.fov += e.deltaY * 0.05;
+            camera.fov = Math.max(30, Math.min(camera.fov, 120));
+            camera.updateProjectionMatrix();
+        });
+
+        // Handle window resizing
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Audio setup
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const backgroundMusic = document.getElementById('backgroundMusic');
+        const audioSource = audioContext.createMediaElementSource(backgroundMusic);
+
+        // Create filters
+        const lowPassFilter = audioContext.createBiquadFilter();
+        lowPassFilter.type = 'lowpass';
+        lowPassFilter.frequency.value = 22050;
+
+        const highPassFilter = audioContext.createBiquadFilter();
+        highPassFilter.type = 'highpass';
+        highPassFilter.frequency.value = 0;
+
+        // Connect audio nodes
+        audioSource.connect(lowPassFilter);
+        lowPassFilter.connect(highPassFilter);
+        highPassFilter.connect(audioContext.destination);
+
+        const analyser = audioContext.createAnalyser();
+        highPassFilter.connect(analyser);
+
+        analyser.fftSize = 256;
+        const bufferLength = analyser.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+
+        // Create spectrometer bars
+        const spectrometer = document.getElementById('spectrometer');
+        const numBars = 128; // Increased number of bars
+        const spectrometerBars = [];
+        const segmentsPerBar = 20;
+
+        // Update the getColorForIntensity function
+        function getColorForIntensity(intensity) {
+            // Create a gradient from red (low) to yellow (medium) to green (high)
+            let r, g, b;
+            
+            if (intensity < 0.5) {
+                // Red to Yellow
+                r = 255;
+                g = Math.round(intensity * 2 * 255);
+                b = 0;
+            } else {
+                // Yellow to Green
+                r = Math.round((1 - intensity) * 2 * 255);
+                g = 255;
+                b = 0;
+            }
+            
+            return { r, g, b };
+        }
+
+        for (let i = 0; i < numBars; i++) {
+            const bar = document.createElement('div');
+            bar.className = 'spectrometer-bar';
+            spectrometer.appendChild(bar);
+            spectrometerBars.push(bar);
+        }
+
+        // Setup control panel sliders
+        const lowPassSlider = document.getElementById('lowPassFilter');
+        const highPassSlider = document.getElementById('highPassFilter');
+        const tempoSlider = document.getElementById('tempo');
+
+        const lowPassValue = document.getElementById('lowPassValue');
+        const highPassValue = document.getElementById('highPassValue');
+        const tempoValue = document.getElementById('tempoValue');
+
+        lowPassSlider.addEventListener('input', (e) => {
+            const value = e.target.value;
+            lowPassFilter.frequency.value = value;
+            lowPassValue.textContent = `${value} Hz`;
+        });
+
+        highPassSlider.addEventListener('input', (e) => {
+            const value = e.target.value;
+            highPassFilter.frequency.value = value;
+            highPassValue.textContent = `${value} Hz`;
+        });
+
+        tempoSlider.addEventListener('input', (e) => {
+            const value = parseFloat(e.target.value);
+            backgroundMusic.playbackRate = value;
+            tempoValue.textContent = `${value.toFixed(1)}x`;
+            
+            // Adjust rotation speed based on tempo with increased effect
+            currentRotationSpeed = baseRotationSpeed * Math.pow(value, rotationSpeedMultiplier);
+        });
+
+        // Add this to your existing JavaScript
+        const playPauseBtn = document.getElementById('playPauseBtn');
+        playPauseBtn.addEventListener('click', () => {
+            if (audioContext.state === 'suspended') {
+                audioContext.resume();
+            }
+
+            if (backgroundMusic.paused) {
+                backgroundMusic.play();
+                playPauseBtn.textContent = 'Pause';
+            } else {
+                backgroundMusic.pause();
+                playPauseBtn.textContent = 'Play';
+            }
+        });
+
+        // Remove or comment out any existing click event listeners that start the music
+        // For example, remove or comment out code like this if it exists:
+        /*
+        document.addEventListener('click', () => {
+            if (audioContext.state === 'suspended') {
+                audioContext.resume();
+            }
+            backgroundMusic.play();
+        }, { once: true });
+        */
+
+        // Variables for smooth zoom effect
+        let targetFOV = 75;
+        const zoomSpeed = 0.5;
+        const baseFOV = 75;
+        const maxZoomIntensity = 85;
+
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            // Get frequency data
+            analyser.getByteFrequencyData(dataArray);
+
+            // Update spectrometer
+            for (let i = 0; i < numBars; i++) {
+                const value = dataArray[i];
+                const percent = value / 255;
+                const height = percent * 100; // Max height of 150px
+                const color = getColorForIntensity(percent);
+                
+                spectrometerBars[i].style.height = `${height}px`;
+                spectrometerBars[i].style.backgroundColor = `rgb(${color.r}, ${color.g}, ${color.b})`;
+            }
+
+            // Calculate average frequency
+            const average = dataArray.reduce((a, b) => a + b) / bufferLength;
+
+            // Set target FOV based on frequency
+            targetFOV = baseFOV + (average / 255) * maxZoomIntensity;
+
+            // Smoothly interpolate current FOV to target FOV
+            camera.fov += (targetFOV - camera.fov) * zoomSpeed;
+            camera.updateProjectionMatrix();
+
+            // Apply momentum and decay
+            if (!isDragging) {
+                skybox.rotation.y += momentum.x;
+                skybox.rotation.x += momentum.y;
+                momentum.x *= momentumDecay;
+                momentum.y *= momentumDecay;
+            }
+
+            // Rotate the skybox using the current rotation speed
+            skybox.rotation.y += currentRotationSpeed;
+            
+            renderer.render(scene, camera);
+        }
+        animate();
+    </script>
+</body>
+</html>
