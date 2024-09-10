@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Three.js Cube Skybox with Video Left Pane and FOV Zoom</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        canvas { display: block; }
+    </style>
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.132.2/build/three.module.js",
+            "three/examples/jsm/controls/OrbitControls": "https://unpkg.com/three@0.132.2/examples/jsm/controls/OrbitControls.js"
+        }
+    }
+    </script>
+</head>
+<body>
+    <video id="video" src="rickrollt.mp4" loop style="display:none"></video>
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
+
+        // Set up the scene, camera, and renderer
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // Load the equirectangular texture
+        const loader = new THREE.TextureLoader();
+        loader.load('https://threejs.org/examples/textures/2294472375_24a3b8ef46_o.jpg', (texture) => {
+            const rt = new THREE.WebGLCubeRenderTarget(texture.image.height);
+            rt.fromEquirectangularTexture(renderer, texture);
+            scene.background = rt.texture;
+
+            // Create video texture for the left pane
+            const video = document.getElementById('video');
+            const videoTexture = new THREE.VideoTexture(video);
+            videoTexture.minFilter = THREE.LinearFilter;
+            videoTexture.magFilter = THREE.LinearFilter;
+            videoTexture.format = THREE.RGBFormat;
+
+            // Create a plane for the video
+            const planeGeometry = new THREE.PlaneGeometry(500, 500);
+            const planeMaterial = new THREE.MeshBasicMaterial({ map: videoTexture, side: THREE.DoubleSide });
+            const videoPlane = new THREE.Mesh(planeGeometry, planeMaterial);
+            videoPlane.rotation.y = Math.PI / 2;
+            videoPlane.position.x = -249; // Slightly inside the left of the skybox
+            scene.add(videoPlane);
+
+            // Start the video
+            video.play();
+        });
+
+        // Position the camera
+        camera.position.set(0, 0, 0.1);
+
+        // Add OrbitControls
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.screenSpacePanning = false;
+        controls.minDistance = 0.1;
+        controls.maxDistance = 500;
+        controls.maxPolarAngle = Math.PI;
+        controls.enableZoom = false; // Disable default zoom
+
+        // FOV zoom parameters
+        const minFov = 30;
+        const maxFov = 90;
+        const zoomSpeed = 0.1;
+
+        // Add mouse wheel event listener for FOV zoom
+        renderer.domElement.addEventListener('wheel', (event) => {
+            event.preventDefault();
+            const fov = camera.fov + event.deltaY * zoomSpeed;
+            camera.fov = THREE.MathUtils.clamp(fov, minFov, maxFov);
+            camera.updateProjectionMatrix();
+        });
+
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        animate();
+
+        // Handle window resizing
+        window.addEventListener('resize', onWindowResize, false);
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+    </script>
+</body>
+</html>
