@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>I can haz dogz #icanhazdogz I can has dogs meme by cxhartmann</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        canvas { display: block; }
+        #spectrometer {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 75px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            padding: 0;
+            box-sizing: border-box;
+            pointer-events: none;
+        }
+        .spectrometer-bar {
+            position: relative;
+            flex-grow: 1;
+            width: 2px;
+            margin: 0 1px;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+            transition: height 0.05s ease;
+            opacity: 1;
+        }
+
+        .peak-indicator {
+            position: absolute;
+            width: 100%;
+            height: 4px;
+            background-color: rgb(0, 0, 0);
+            bottom: 0;
+            transition: bottom 0.3s ease;
+            box-shadow: 0 0 2px rgba(255, 255, 255, 0.5);
+        }
+
+        #control-panel {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+            color: white;
+            font-family: Arial, sans-serif;
+            z-index: 1000;
+        }
+
+        .button-container {
+            display: flex;
+            justify-content: flex-start;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        #playPauseBtn {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+
+        #playPauseBtn:hover {
+            background-color: #45a049;
+        }
+
+        #creditsBtn {
+            background-color: #008CBA;
+            border: none;
+            color: white;
+            padding: 5px 10px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 12px;
+            cursor: pointer;
+            border-radius: 3px;
+            transition: background-color 0.3s;
+            margin-left: 10px;
+        }
+
+        #creditsBtn:hover {
+            background-color: #007B9A;
+        }
+
+        .slider-container {
+            margin-bottom: 10px;
+        }
+
+        .slider-container label {
+            display: inline-block;
+            width: 120px;
+        }
+
+        .slider-container input {
+            width: 150px;
+            vertical-align: middle;
+        }
+
+        .slider-value {
+            display: inline-block;
+            width: 50px;
+            text-align: right;
+        }
+
+        .overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .overlay-content {
+            color: white;
+            font-size: 48px;
+            font-family: Arial, sans-serif;
+        }
+
+        .overlay-content a {
+            color: #1DA1F2;
+            text-decoration: none;
+            font-size: 24px;
+            margin-top: 10px;
+            display: inline-block;
+        }
+
+        .overlay-content a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <video id="videoElement" style="display: none;">
+        <source src="mmmdogs.mp4" type="video/mp4">
+        Your browser does not support the video tag.
+    </video>
+    <div id="spectrometer"></div>
+
+    <div id="control-panel">
+        <div class="button-container">
+            <button id="playPauseBtn">Play</button>
+            <button id="creditsBtn">Credits</button>
+        </div>
+        <div class="slider-container">
+            <label for="lowPassFilter">Low Pass Filter:</label>
+            <input type="range" id="lowPassFilter" min="0" max="22050" value="22050">
+            <span class="slider-value" id="lowPassValue">22050 Hz</span>
+        </div>
+        <div class="slider-container">
+            <label for="highPassFilter">High Pass Filter:</label>
+            <input type="range" id="highPassFilter" min="0" max="22050" value="0">
+            <span class="slider-value" id="highPassValue">0 Hz</span>
+        </div>
+        <div class="slider-container">
+            <label for="tempo">Tempo:</label>
+            <input type="range" id="tempo" min="0.5" max="2" step="0.1" value="1">
+            <span class="slider-value" id="tempoValue">1x</span>
+        </div>
+    </div>
+
+    <div id="creditsOverlay" class="overlay">
+        <div class="overlay-content">
+            Worlds first Meme 3.0
+            <br>
+            I can haz dogz #icanhazdogz
+            <br>
+            <a href="https://x.com/MegaphonixMusic/status/1833910892037378442" target="_blank">Video OP: @MegaphonixMusic</a>
+            <br>
+            by cxhartmann
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        !function(){const e=new THREE.Scene,t=new THREE.PerspectiveCamera(75,window.innerWidth/window.innerHeight,.1,1e3),n=new THREE.WebGLRenderer;n.setSize(window.innerWidth,window.innerHeight),document.body.appendChild(n.domElement);const o=new THREE.TextureLoader,i=o.load("aipepe.png"),a=o.load("pepeai2.jpg"),r=o.load("pepeai2.jpg"),s=document.getElementById("videoElement"),l=new THREE.VideoTexture(s);i.repeat.x=-1,a.repeat.x=-1,r.repeat.x=-1,l.repeat.x=-1,i.center.set(.5,.5),a.center.set(.5,.5),r.center.set(.5,.5),l.center.set(.5,.5);const d=new THREE.BoxGeometry(500,500,500),c=[new THREE.MeshPhongMaterial({map:i,side:THREE.BackSide,transparent:!0,opacity:.9}),new THREE.MeshPhongMaterial({map:i,side:THREE.BackSide,transparent:!0,opacity:.9}),new THREE.MeshPhongMaterial({map:a,side:THREE.BackSide,transparent:!0,opacity:.9}),new THREE.MeshPhongMaterial({map:r,side:THREE.BackSide,transparent:!0,opacity:.9}),new THREE.MeshPhongMaterial({map:l,side:THREE.BackSide,transparent:!0,opacity:.9}),new THREE.MeshPhongMaterial({map:i,side:THREE.BackSide,transparent:!0,opacity:.9})],u=new THREE.Mesh(d,c);e.add(u),t.position.set(0,0,.1);let p=!1,m={x:0,y:0},h={x:0,y:0};const f=.95,g=.005;function y(e,t){p=!0,m={x:e,y:t}}function w(){p=!1}function v(e,t){if(p){const n={x:e-m.x,y:t-m.y};u.rotation.y+=n.x*g,u.rotation.x+=n.y*g,h.x=n.x*g,h.y=n.y*g,m={x:e,y:t}}}document.addEventListener("mousedown",e=>y(e.clientX,e.clientY)),document.addEventListener("mouseup",w),document.addEventListener("mousemove",e=>v(e.clientX,e.clientY)),document.addEventListener("touchstart",e=>{1===e.touches.length&&y(e.touches[0].clientX,e.touches[0].clientY)}),document.addEventListener("touchend",w),document.addEventListener("touchmove",e=>{1===e.touches.length&&v(e.touches[0].clientX,e.touches[0].clientY)}),document.addEventListener("touchmove",e=>e.preventDefault(),{passive:!1}),document.addEventListener("wheel",e=>{t.fov+=.05*e.deltaY,t.fov=Math.max(30,Math.min(t.fov,120)),t.updateProjectionMatrix()}),window.addEventListener("resize",()=>{t.aspect=window.innerWidth/window.innerHeight,t.updateProjectionMatrix(),n.setSize(window.innerWidth,window.innerHeight)});const E=new(window.AudioContext||window.webkitAudioContext),x=E.createMediaElementSource(s),M=E.createBiquadFilter();M.type="lowpass",M.frequency.value=22050;const b=E.createBiquadFilter();b.type="highpass",b.frequency.value=0,x.connect(M),M.connect(b),b.connect(E.destination);const T=E.createAnalyser();b.connect(T),T.fftSize=256;const S=T.frequencyBinCount,L=new Uint8Array(S),H=document.getElementById("spectrometer"),B=128,P=[],A=[],k=new Array(B).fill(0),C=.1,I=30,R=new Array(B).fill(0);for(let e=0;e<B;e++){const t=document.createElement("div");t.className="spectrometer-bar";const n=document.createElement("div");n.className="peak-indicator",t.appendChild(n),H.appendChild(t),P.push(t),A.push(n)}function F(e){let t,n,o;return e<.5?(t=255,n=Math.round(2*e*255),o=0):(t=Math.round(2*(1-e)*255),n=255,o=0),{r:t,g:n,b:o}}const W=document.getElementById("lowPassFilter"),z=document.getElementById("highPassFilter"),D=document.getElementById("tempo"),G=document.getElementById("lowPassValue"),O=document.getElementById("highPassValue"),V=document.getElementById("tempoValue");W.addEventListener("input",e=>{const t=e.target.value;M.frequency.value=t,G.textContent=`${t} Hz`}),z.addEventListener("input",e=>{const t=e.target.value;b.frequency.value=t,O.textContent=`${t} Hz`}),D.addEventListener("input",e=>{const t=parseFloat(e.target.value);s.playbackRate=t,V.textContent=`${t.toFixed(1)}x`,Y=j*Math.pow(t,X)});const q=document.getElementById("playPauseBtn");q.addEventListener("click",()=>{"suspended"===E.state&&E.resume(),s.paused?(s.play(),q.textContent="Pause"):(s.pause(),q.textContent="Play")});let j=.001,Y=j;const X=3;let Z=75;const _=.5,J=75,K=85,Q=[];const U=[16711680,65280,255,16776960,16711935,65535];for(let t=0;t<6;t++){const n=new THREE.PointLight(U[t],0,1e3);n.position.set(400*Math.random()-200,400*Math.random()-200,400*Math.random()-200),e.add(n),Q.push(n)}const $=new THREE.AmbientLight(16777215,.1);e.add($);const ee=document.getElementById("creditsBtn"),te=document.getElementById("creditsOverlay");let ne=!1;function oe(){ne=!ne,te.style.display=ne?"flex":"none"}function ie(){requestAnimationFrame(ie),l&&(l.needsUpdate=!0),T.getByteFrequencyData(L);for(let e=0;e<B;e++){const t=L[e],n=t/255,o=75*n,i=F(n);P[e].style.height=`${o}px`,P[e].style.backgroundColor=`rgb(${i.r}, ${i.g}, ${i.b})`,o>=k[e]?(k[e]=o,R[e]=I):R[e]>0?R[e]--:k[e]=Math.max(o,k[e]-C),A[e].style.bottom=`${k[e]}px`,A[e].style.top="auto"}const o=L.reduce((e,t)=>e+t)/S;Z=J+o/255*K,t.fov+=(Z-t.fov)*_,t.updateProjectionMatrix(),p||(u.rotation.y+=h.x,u.rotation.x+=h.y,h.x*=f,h.y*=f),u.rotation.y+=Y;const i=6,a=Math.floor(S/i);for(let e=0;e<Q.length;e++){const t=e*a,n=t+a,o=L.slice(t,n).reduce((e,t)=>e+t)/a/255;o>.5?Q[e].intensity=10*o:Q[e].intensity=0,setTimeout(()=>{Q[e].intensity*=.2},75);const i=.0015*Date.now(),r=125+75*o;Q[e].position.x=Math.sin(i+2*e)*r,Q[e].position.y=Math.cos(i+1.5*e)*r,Q[e].position.z=Math.sin(i+1.7*e)*r}Math.random()<.03&&(Q.forEach(e=>e.intensity=5),setTimeout(()=>{Q.forEach(e=>e.intensity=0)},75)),n.render(e,t)}ee.addEventListener("click",oe),te.addEventListener("click",oe),ie()}();
+    </script>
+</body>
+</html>
