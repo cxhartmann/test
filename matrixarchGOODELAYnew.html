@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Matrix Webcam Display Skybox</title>
+    <title>Matrix.me Webcam Display Skybox</title>
     <style>
         body { 
             margin: 0;
@@ -12,9 +12,35 @@
         #outputCanvas {
             display: none;
         }
+        .toolbar {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 1000;
+        }
+        
+        .record-btn {
+            background: #ff4444;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        .camera-btn {
+            background: #4444ff;
+        }
     </style>
 </head>
 <body>
+    <div class="toolbar">
+        <button class="record-btn">Record</button>
+        <button class="camera-btn">📸</button>
+    </div>
     <canvas id="outputCanvas"></canvas>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -105,6 +131,14 @@
             video.srcObject = stream;
         }
 
+        // Add these variables after the camera position variables
+        let targetRotationX = 0;
+        let targetRotationY = 0;
+        let velocityX = 0;
+        let velocityY = 0;
+        const damping = 0.95; // Adjust this value to change smoothing (0.9-0.99)
+        const sensitivity = 0.0005; // Reduced from 0.01 to 0.003 for less sensitive rotation
+
         function render(timestamp) {
             if (video.readyState === video.HAVE_ENOUGH_DATA) {
                 // Update buffer frames
@@ -148,13 +182,29 @@
                         material.map.needsUpdate = true;
                     }
                 });
-            }
 
-            // Update camera position
-            camera.position.x = distance * Math.sin(rotationY) * Math.cos(rotationX);
-            camera.position.y = distance * Math.sin(rotationX);
-            camera.position.z = distance * Math.cos(rotationY) * Math.cos(rotationX);
-            camera.lookAt(scene.position);
+                // Add smooth rotation logic
+                if (!isDragging) {
+                    velocityX *= damping;
+                    velocityY *= damping;
+                }
+                
+                targetRotationX += velocityX;
+                targetRotationY += velocityY;
+
+                // Limit vertical rotation
+                targetRotationX = Math.max(-Math.PI/2, Math.min(Math.PI/2, targetRotationX));
+
+                // Smooth interpolation between current and target rotation
+                rotationX += (targetRotationX - rotationX) * 0.1;
+                rotationY += (targetRotationY - rotationY) * 0.1;
+
+                // Update camera position
+                camera.position.x = distance * Math.sin(rotationY) * Math.cos(rotationX);
+                camera.position.y = distance * Math.sin(rotationX);
+                camera.position.z = distance * Math.cos(rotationY) * Math.cos(rotationX);
+                camera.lookAt(scene.position);
+            }
 
             renderer.render(scene, camera);
             requestAnimationFrame(render);
@@ -164,6 +214,7 @@
         let isDragging = false;
         let previousMousePosition = { x: 0, y: 0 };
 
+        // Mouse events
         document.addEventListener('mousedown', (e) => {
             isDragging = true;
             previousMousePosition = { x: e.clientX, y: e.clientY };
@@ -171,18 +222,7 @@
 
         document.addEventListener('mousemove', (e) => {
             if (isDragging) {
-                const deltaMove = {
-                    x: e.clientX - previousMousePosition.x,
-                    y: e.clientY - previousMousePosition.y
-                };
-
-                rotationY += deltaMove.x * 0.01;
-                rotationX += deltaMove.y * 0.01;
-
-                // Limit vertical rotation
-                rotationX = Math.max(-Math.PI/2, Math.min(Math.PI/2, rotationX));
-
-                previousMousePosition = { x: e.clientX, y: e.clientY };
+                handleMovement(e.clientX, e.clientY);
             }
         });
 
@@ -190,10 +230,70 @@
             isDragging = false;
         });
 
-        document.addEventListener('wheel', (e) => {
-            distance += e.deltaY * 0.01;
-            distance = Math.max(-20, Math.min(30, distance));
+        // Touch events
+        document.addEventListener('touchstart', (e) => {
+            isDragging = true;
+            previousMousePosition = { 
+                x: e.touches[0].clientX, 
+                y: e.touches[0].clientY 
+            };
         });
+
+        document.addEventListener('touchmove', (e) => {
+            e.preventDefault(); // Prevent scrolling while rotating
+            if (isDragging) {
+                handleMovement(e.touches[0].clientX, e.touches[0].clientY);
+            }
+        });
+
+        document.addEventListener('touchend', () => {
+            isDragging = false;
+        });
+
+        // Unified movement handler
+        function handleMovement(currentX, currentY) {
+            const deltaMove = {
+                x: currentX - previousMousePosition.x,
+                y: currentY - previousMousePosition.y
+            };
+
+            // Add to velocity instead of directly updating rotation
+            velocityX += deltaMove.y * sensitivity;
+            velocityY += deltaMove.x * sensitivity;
+
+            previousMousePosition = { x: currentX, y: currentY };
+        }
+
+        // Handle pinch zoom for mobile
+        let initialPinchDistance = null;
+        document.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 2) {
+                initialPinchDistance = getPinchDistance(e);
+            }
+        });
+
+        document.addEventListener('touchmove', (e) => {
+            if (e.touches.length === 2 && initialPinchDistance !== null) {
+                const currentDistance = getPinchDistance(e);
+                const pinchDelta = initialPinchDistance - currentDistance;
+                
+                distance += pinchDelta * 0.05;
+                distance = Math.max(0.1, Math.min(50, distance));
+                
+                initialPinchDistance = currentDistance;
+            }
+        });
+
+        document.addEventListener('touchend', () => {
+            initialPinchDistance = null;
+        });
+
+        function getPinchDistance(e) {
+            return Math.hypot(
+                e.touches[0].clientX - e.touches[1].clientX,
+                e.touches[0].clientY - e.touches[1].clientY
+            );
+        }
 
         // Handle window resizing
         window.addEventListener('resize', () => {
@@ -202,14 +302,174 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
 
-        // Start the webcam
+        // Start the webcam (simplified without audio)
         navigator.mediaDevices.getUserMedia({ video: true })
             .then(stream => {
                 initializeCanvas(stream);
+                
+                // Initialize mediaRecorder with canvas stream only
+                const canvasStream = renderer.domElement.captureStream(30);
+                mediaRecorder = new MediaRecorder(canvasStream, {
+                    mimeType: 'video/webm;codecs=vp9'
+                });
+
+                // Set up mediaRecorder handlers
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) {
+                        recordedChunks.push(event.data);
+                    }
+                };
+
+                mediaRecorder.onstop = () => {
+                    // Disable button and show saving state
+                    recordBtn.textContent = 'Saving...';
+                    recordBtn.disabled = true;
+                    recordBtn.style.background = '#888888';  // Gray out the button
+
+                    // Create a temporary video element to process the recording
+                    const tempVideo = document.createElement('video');
+                    const tempCanvas = document.createElement('canvas');
+                    const tempCtx = tempCanvas.getContext('2d');
+                    
+                    // Create blob and URL for the recorded video
+                    const recordedBlob = new Blob(recordedChunks, { type: 'video/webm' });
+                    tempVideo.src = URL.createObjectURL(recordedBlob);
+                    
+                    tempVideo.onloadedmetadata = () => {
+                        // Set canvas size to match video dimensions
+                        tempCanvas.width = tempVideo.videoWidth;
+                        tempCanvas.height = tempVideo.videoHeight;
+                        
+                        // Create a MediaRecorder for the processed video
+                        const processedStream = tempCanvas.captureStream();
+                        const processedRecorder = new MediaRecorder(processedStream, {
+                            mimeType: 'video/webm;codecs=vp9'
+                        });
+                        
+                        const processedChunks = [];
+                        processedRecorder.ondataavailable = (e) => {
+                            if (e.data.size > 0) {
+                                processedChunks.push(e.data);
+                            }
+                        };
+                        
+                        processedRecorder.onstop = () => {
+                            const finalBlob = new Blob(processedChunks, { type: 'video/webm' });
+                            const url = URL.createObjectURL(finalBlob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = 'matrix-recording.webm';
+                            a.click();
+                            
+                            // Cleanup
+                            URL.revokeObjectURL(url);
+                            
+                            // Reset button state after processing
+                            recordBtn.textContent = 'Record';
+                            recordBtn.disabled = false;
+                            recordBtn.style.background = '#ff4444';
+                        };
+                        
+                        // Start processing the video
+                        processedRecorder.start();
+                        tempVideo.currentTime = 0;
+                        tempVideo.play();
+                        
+                        function processFrame() {
+                            if (tempVideo.ended) {
+                                processedRecorder.stop();
+                                return;
+                            }
+                            
+                            // Draw the current video frame
+                            tempCtx.drawImage(tempVideo, 0, 0, tempCanvas.width, tempCanvas.height);
+                            
+                            // Add watermark - changed to top right
+                            tempCtx.font = 'bold 48px Arial';
+                            tempCtx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+                            tempCtx.textAlign = 'right';
+                            tempCtx.textBaseline = 'top';  // Changed from 'bottom' to 'top'
+                            tempCtx.fillText('matrix.me', tempCanvas.width - 20, 20);  // Changed Y position to 20
+                            
+                            requestAnimationFrame(processFrame);
+                        }
+                        
+                        processFrame();
+                    };
+                    
+                    // Cleanup original chunks
+                    recordedChunks = [];
+                };
             })
             .catch(error => {
                 console.error('Error accessing webcam:', error);
             });
+
+        // Add after Three.js setup
+        let mediaRecorder;
+        let recordedChunks = [];
+        const recordBtn = document.querySelector('.record-btn');
+
+        recordBtn.addEventListener('click', () => {
+            if (mediaRecorder.state === 'inactive' && !recordBtn.disabled) {  // Check if button is not disabled
+                // Start recording
+                recordedChunks = [];
+                mediaRecorder.start();
+                recordBtn.textContent = 'Stop';
+                recordBtn.style.background = '#ff0000';
+            } else if (mediaRecorder.state === 'recording') {
+                // Stop recording
+                mediaRecorder.stop();
+                // Button state will be handled in onstop handler
+            }
+        });
+
+        // Add screenshot functionality
+        const cameraBtn = document.querySelector('.camera-btn');
+        
+        cameraBtn.addEventListener('click', () => {
+            // Render the current frame
+            renderer.render(scene, camera);
+            
+            // Create a temporary canvas to add the watermark
+            const tempCanvas = document.createElement('canvas');
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCanvas.width = renderer.domElement.width;
+            tempCanvas.height = renderer.domElement.height;
+            
+            // Draw the rendered scene
+            tempCtx.drawImage(renderer.domElement, 0, 0);
+            
+            // Add watermark in top right corner
+            tempCtx.font = 'bold 48px Arial';
+            tempCtx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+            tempCtx.textAlign = 'right';
+            tempCtx.textBaseline = 'top';
+            tempCtx.fillText('matrix.me', tempCanvas.width - 20, 20);
+            
+            // Convert the canvas to a PNG
+            tempCanvas.toBlob((blob) => {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'matrix-screenshot.png';
+                a.click();
+                
+                // Cleanup
+                URL.revokeObjectURL(url);
+            }, 'image/png');
+        });
+
+        // Add mousewheel zoom handler
+        document.addEventListener('wheel', (e) => {
+            e.preventDefault(); // Prevent page scrolling
+            
+            // Adjust distance based on wheel direction
+            distance += e.deltaY * 0.01;
+            
+            // Clamp distance between 1 and 50
+            distance = Math.max(0.1, Math.min(50, distance));
+        }, { passive: false }); // Required for preventDefault() to work
     </script>
 </body>
 </html>
