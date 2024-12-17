@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Matrix Webcam Display Skybox</title>
+    <style>
+        body { 
+            margin: 0;
+            padding: 0;
+            background: #000;
+            overflow: hidden;
+        }
+        #outputCanvas {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="outputCanvas"></canvas>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        const GRID_SIZE = 4; // 5x5 grid
+        const DELAYS = Array(GRID_SIZE * GRID_SIZE).fill(0)
+            .map((_, i) => (i * 500) % 10000);
+
+        // Set up the main canvas and Three.js scene
+        const outputCanvas = document.getElementById('outputCanvas');
+        const ctx = outputCanvas.getContext('2d');
+
+        // Three.js setup
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // Camera position and controls
+        camera.position.z = 5;
+        let rotationX = 0;
+        let rotationY = 0;
+        let distance = 5;
+        
+        // Set up the source video
+        const video = document.createElement('video');
+        video.autoplay = true;
+        video.playsinline = true;
+
+        // Set up the buffer canvases
+        const buffers = DELAYS.map(() => {
+            return {
+                canvas: document.createElement('canvas'),
+                frames: []
+            };
+        });
+
+        // Create skybox
+        const skyboxGeometry = new THREE.BoxGeometry(10, 10, 10);
+        const materials = [];
+
+        // Create separate video textures for top and bottom
+        const topTexture = new THREE.VideoTexture(video);
+        const bottomTexture = new THREE.VideoTexture(video);
+        topTexture.minFilter = THREE.LinearFilter;
+        bottomTexture.minFilter = THREE.LinearFilter;
+
+        for (let i = 0; i < 6; i++) {
+            if (i === 2) { // Top face
+                materials.push(new THREE.MeshBasicMaterial({ 
+                    map: topTexture,
+                    side: THREE.BackSide 
+                }));
+            } else if (i === 3) { // Bottom face
+                materials.push(new THREE.MeshBasicMaterial({ 
+                    map: bottomTexture,
+                    side: THREE.BackSide 
+                }));
+            } else {
+                const texture = new THREE.CanvasTexture(outputCanvas);
+                texture.minFilter = THREE.LinearFilter;
+                materials.push(new THREE.MeshBasicMaterial({ 
+                    map: texture,
+                    side: THREE.BackSide 
+                }));
+            }
+        }
+        const skybox = new THREE.Mesh(skyboxGeometry, materials);
+        scene.add(skybox);
+
+        function initializeCanvas(stream) {
+            video.addEventListener('loadedmetadata', () => {
+                const paneWidth = video.videoWidth;
+                const paneHeight = video.videoHeight;
+                
+                outputCanvas.width = paneWidth * GRID_SIZE;
+                outputCanvas.height = paneHeight * GRID_SIZE;
+                
+                buffers.forEach(buffer => {
+                    buffer.canvas.width = paneWidth;
+                    buffer.canvas.height = paneHeight;
+                });
+
+                requestAnimationFrame(render);
+            });
+
+            video.srcObject = stream;
+        }
+
+        function render(timestamp) {
+            if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                // Update buffer frames
+                buffers.forEach((buffer, i) => {
+                    const ctx = buffer.canvas.getContext('2d');
+                    ctx.drawImage(video, 0, 0);
+                    
+                    buffer.frames.push({
+                        imageData: ctx.getImageData(0, 0, buffer.canvas.width, buffer.canvas.height),
+                        timestamp
+                    });
+
+                    while (buffer.frames.length > 0 && 
+                           timestamp - buffer.frames[0].timestamp > DELAYS[i] + 1000) {
+                        buffer.frames.shift();
+                    }
+                });
+
+                // Clear main canvas
+                ctx.fillStyle = '#000';
+                ctx.fillRect(0, 0, outputCanvas.width, outputCanvas.height);
+
+                // Draw delayed frames to main canvas
+                buffers.forEach((buffer, i) => {
+                    const row = Math.floor(i / GRID_SIZE);
+                    const col = i % GRID_SIZE;
+                    const x = col * buffer.canvas.width;
+                    const y = row * buffer.canvas.height;
+
+                    const targetTime = timestamp - DELAYS[i];
+                    const frame = buffer.frames.find(f => f.timestamp >= targetTime);
+
+                    if (frame) {
+                        ctx.putImageData(frame.imageData, x, y);
+                    }
+                });
+
+                // Update all textures
+                materials.forEach((material, index) => {
+                    if (material.map) {
+                        material.map.needsUpdate = true;
+                    }
+                });
+            }
+
+            // Update camera position
+            camera.position.x = distance * Math.sin(rotationY) * Math.cos(rotationX);
+            camera.position.y = distance * Math.sin(rotationX);
+            camera.position.z = distance * Math.cos(rotationY) * Math.cos(rotationX);
+            camera.lookAt(scene.position);
+
+            renderer.render(scene, camera);
+            requestAnimationFrame(render);
+        }
+
+        // Event listeners for controls
+        let isDragging = false;
+        let previousMousePosition = { x: 0, y: 0 };
+
+        document.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            previousMousePosition = { x: e.clientX, y: e.clientY };
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (isDragging) {
+                const deltaMove = {
+                    x: e.clientX - previousMousePosition.x,
+                    y: e.clientY - previousMousePosition.y
+                };
+
+                rotationY += deltaMove.x * 0.01;
+                rotationX += deltaMove.y * 0.01;
+
+                // Limit vertical rotation
+                rotationX = Math.max(-Math.PI/2, Math.min(Math.PI/2, rotationX));
+
+                previousMousePosition = { x: e.clientX, y: e.clientY };
+            }
+        });
+
+        document.addEventListener('mouseup', () => {
+            isDragging = false;
+        });
+
+        document.addEventListener('wheel', (e) => {
+            distance += e.deltaY * 0.01;
+            distance = Math.max(-20, Math.min(30, distance));
+        });
+
+        // Handle window resizing
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Start the webcam
+        navigator.mediaDevices.getUserMedia({ video: true })
+            .then(stream => {
+                initializeCanvas(stream);
+            })
+            .catch(error => {
+                console.error('Error accessing webcam:', error);
+            });
+    </script>
+</body>
+</html>
